@@ -405,7 +405,21 @@ const PROVIDERS = [
     name: "Gemini",
     type: "gemini",
     endpoint: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-    apiKey: "YOUR_GEMINI_API_KEY",        // <-- free key at aistudio.google.com
+    apiKey: "curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent" \
+  -H 'Content-Type: application/json' \
+  -H 'X-goog-api-key: AQ.Ab8RN6L-LGj6Y1H3ETLU1k-m8YeWcqgQR2rPFdqGTELDsl4QEQ' \
+  -X POST \
+  -d '{
+    "contents": [
+      {
+        "parts": [
+          {
+            "text": "Explain how AI works in a few words"
+          }
+        ]
+      }
+    ]
+  }'",        // <-- free key at aistudio.google.com
   },
   {
     name: "OpenAI",
