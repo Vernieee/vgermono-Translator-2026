@@ -387,23 +387,41 @@
 /* =========================================================================
    TRANSLATION API CONFIGURATION
    -------------------------------------------------------------------------
-   Edit the values below to point at whichever LLM translation backend you
-   use. The default target is OpenAI's Chat Completions endpoint because it
-   handles free-form instructions (glossary terms, tone, formatting) far
-   better than a plain machine-translation API.
+   PROVIDERS is tried in order, top to bottom. If the first one fails (bad
+   key, rate limit, network error, malformed response), the app silently
+   falls through to the next one — the user only sees an error if every
+   provider in the list fails. Add, remove, or reorder entries freely; each
+   just needs a matching "type" so the app knows how to shape the request.
+
+   Supported "type" values: "gemini" | "openai" | "anthropic"
 
    IMPORTANT: calling a provider directly from client-side JS exposes your
    API key to anyone who opens devtools. For a real deployment, put a tiny
-   serverless function (e.g. a Vercel /api route) in front of this call and
-   point `endpoint` at that route instead — see the comment in
-   callTranslationAPI() below for the swap-in point.
+   serverless function (e.g. a Vercel /api route) in front of each call and
+   point "endpoint" at your own route instead.
    ========================================================================= */
-const CONFIG = {
-  provider: "openai",                                   // "openai" | "anthropic" | "custom"
-  endpoint: "https://api.openai.com/v1/chat/completions",
-  apiKey: "YOUR_API_KEY_HERE",                           // <-- replace with your key (or proxy route)
-  model: "gpt-4o-mini",
-};
+const PROVIDERS = [
+  {
+    name: "Gemini",
+    type: "gemini",
+    endpoint: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+    apiKey: "YOUR_GEMINI_API_KEY",        // <-- free key at aistudio.google.com
+  },
+  {
+    name: "OpenAI",
+    type: "openai",
+    endpoint: "https://api.openai.com/v1/chat/completions",
+    apiKey: "YOUR_OPENAI_API_KEY",        // <-- key at platform.openai.com/api-keys
+    model: "gpt-4o-mini",
+  },
+  // {
+  //   name: "Claude",
+  //   type: "anthropic",
+  //   endpoint: "https://api.anthropic.com/v1/messages",
+  //   apiKey: "YOUR_ANTHROPIC_API_KEY",  // <-- key at console.anthropic.com
+  //   model: "claude-haiku-4-5-20251001",
+  // },
+];
 
 /* L2 support glossary — extend this freely. It's injected into the prompt
    so the model prefers these mappings whenever the term appears. */
@@ -488,7 +506,7 @@ function renderResult(result){
     <p class="result-en">${escapeHtml(result.en)}</p>
   `;
   copyBtn.disabled = false;
-  setStatus('done');
+  setStatus(result._provider ? `done · ${result._provider}` : 'done');
   detectedTag.textContent = result.detected_language || 'auto-detect';
 }
 
@@ -502,55 +520,132 @@ function stripCodeFences(text){
   return text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
 }
 
-/* ---------- API call ---------- */
-async function callTranslationAPI(text){
-  // Swap this function's body if you proxy through your own serverless
-  // route instead of calling the provider directly from the browser.
-  const body = {
-    model: CONFIG.model,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: text }
-    ],
-    temperature: 0.2,
-  };
+/* ---------- per-provider request/response adapters ---------- */
 
-  const response = await fetch(CONFIG.endpoint, {
+function isUnconfigured(provider){
+  return !provider.apiKey || provider.apiKey.startsWith("YOUR_");
+}
+
+async function callOpenAICompatible(provider, text){
+  const response = await fetch(provider.endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${CONFIG.apiKey}`,
+      "Authorization": `Bearer ${provider.apiKey}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      model: provider.model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: text }
+      ],
+      temperature: 0.2,
+    }),
   });
 
   if (!response.ok){
     let detail = '';
-    try{
-      const errJson = await response.json();
-      detail = errJson?.error?.message ? ` — ${errJson.error.message}` : '';
-    }catch(_e){ /* ignore parse failure */ }
-    throw new Error(`API request failed (${response.status})${detail}`);
+    try{ const e = await response.json(); detail = e?.error?.message ? ` — ${e.error.message}` : ''; }catch(_e){}
+    throw new Error(`${provider.name} request failed (${response.status})${detail}`);
   }
 
   const data = await response.json();
   const raw = data?.choices?.[0]?.message?.content;
-  if (!raw){
-    throw new Error("The API returned an unexpected response shape.");
+  if (!raw) throw new Error(`${provider.name} returned an unexpected response shape.`);
+  return raw;
+}
+
+async function callGemini(provider, text){
+  const url = `${provider.endpoint}?key=${provider.apiKey}`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text }] }],
+      generationConfig: { temperature: 0.2 },
+    }),
+  });
+
+  if (!response.ok){
+    let detail = '';
+    try{ const e = await response.json(); detail = e?.error?.message ? ` — ${e.error.message}` : ''; }catch(_e){}
+    throw new Error(`${provider.name} request failed (${response.status})${detail}`);
   }
 
-  let parsed;
-  try{
-    parsed = JSON.parse(stripCodeFences(raw));
-  }catch(_e){
-    throw new Error("Could not parse the translation response as JSON.");
+  const data = await response.json();
+  const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!raw) throw new Error(`${provider.name} returned an unexpected response shape.`);
+  return raw;
+}
+
+async function callAnthropic(provider, text){
+  const response = await fetch(provider.endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": provider.apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: provider.model,
+      max_tokens: 1000,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: text }],
+    }),
+  });
+
+  if (!response.ok){
+    let detail = '';
+    try{ const e = await response.json(); detail = e?.error?.message ? ` — ${e.error.message}` : ''; }catch(_e){}
+    throw new Error(`${provider.name} request failed (${response.status})${detail}`);
   }
 
-  if (!parsed.zh || !parsed.en){
-    throw new Error("The response was missing a Chinese or English translation.");
+  const data = await response.json();
+  const raw = data?.content?.[0]?.text;
+  if (!raw) throw new Error(`${provider.name} returned an unexpected response shape.`);
+  return raw;
+}
+
+const ADAPTERS = {
+  openai: callOpenAICompatible,
+  gemini: callGemini,
+  anthropic: callAnthropic,
+};
+
+/* ---------- API call with fallback chain ---------- */
+async function callTranslationAPI(text){
+  const configured = PROVIDERS.filter(p => !isUnconfigured(p));
+  if (configured.length === 0){
+    throw new Error("No API key configured. Set an apiKey in the PROVIDERS list near the top of the script.");
   }
 
-  return parsed;
+  const failures = [];
+
+  for (const provider of configured){
+    const adapter = ADAPTERS[provider.type];
+    if (!adapter){
+      failures.push(`${provider.name}: unknown provider type "${provider.type}"`);
+      continue;
+    }
+
+    try{
+      setStatus(`trying ${provider.name}…`);
+      const raw = await adapter(provider, text);
+      const parsed = JSON.parse(stripCodeFences(raw));
+      if (!parsed.zh || !parsed.en){
+        throw new Error("response missing a Chinese or English translation");
+      }
+      parsed._provider = provider.name;
+      return parsed;
+    }catch(err){
+      failures.push(`${provider.name}: ${err.message}`);
+      // fall through to the next provider in the list
+    }
+  }
+
+  throw new Error(`All providers failed. ${failures.join(" · ")}`);
 }
 
 /* ---------- event handlers ---------- */
@@ -558,11 +653,6 @@ async function handleTranslate(){
   const text = sourceText.value.trim();
   if (!text){
     renderError("Enter some text to translate first.");
-    return;
-  }
-
-  if (!CONFIG.apiKey || CONFIG.apiKey === "YOUR_API_KEY_HERE"){
-    renderError("No API key configured. Set CONFIG.apiKey (or point CONFIG.endpoint at your own proxy) near the top of the script.");
     return;
   }
 
