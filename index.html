@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Universal Translator — L2 Support</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Serif+TC:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink: #101A1C;
+    --ink-panel: #17262A;
+    --ink-panel-2: #1D2E32;
+    --ink-border: #2C4046;
+    --ink-text: #E9E4D8;
+    --ink-text-dim: #9FB0B0;
+
+    --paper: #F4EFE4;
+    --paper-2: #ECE5D4;
+    --paper-border: #D9CDAF;
+    --paper-text: #241F16;
+    --paper-text-dim: #6B6350;
+
+    --seal: #A5382A;
+    --seal-dark: #832C21;
+    --jade: #4C7A6D;
+    --jade-dark: #3B6154;
+
+    --radius: 10px;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --serif-latin: 'Source Serif 4', Georgia, serif;
+    --serif-cjk: 'Noto Serif TC', 'Source Serif 4', serif;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin:0; padding:0;
+    background: var(--ink);
+    color: var(--ink-text);
+    font-family: var(--sans);
+    min-height: 100vh;
+  }
+
+  body{
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  /* ---------- header ---------- */
+  header{
+    padding: 28px clamp(20px, 5vw, 56px) 18px;
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+    border-bottom: 1px solid var(--ink-border);
+  }
+  header h1{
+    font-family: var(--serif-latin);
+    font-weight:600;
+    font-size: clamp(22px, 3vw, 28px);
+    margin:0;
+    letter-spacing: 0.2px;
+  }
+  header h1 span{
+    font-family: var(--serif-cjk);
+    color: var(--seal);
+  }
+  header p{
+    margin:0;
+    color: var(--ink-text-dim);
+    font-size: 14px;
+  }
+
+  /* ---------- main layout ---------- */
+  main{
+    flex:1;
+    display:grid;
+    grid-template-columns: 1fr 44px 1fr;
+    align-items: stretch;
+    gap: 0;
+    padding: clamp(20px, 4vw, 48px);
+    max-width: 1320px;
+    margin: 0 auto;
+    width:100%;
+  }
+
+  @media (max-width: 860px){
+    main{ grid-template-columns: 1fr; gap: 18px; }
+    .spine{ display:none; }
+  }
+
+  .spine{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .spine .line{
+    width:1px;
+    height: 100%;
+    background: linear-gradient(to bottom, transparent, var(--ink-border) 12%, var(--ink-border) 88%, transparent);
+    position:relative;
+  }
+  .spine .stamp{
+    position:absolute;
+    top:50%; left:50%;
+    transform: translate(-50%,-50%) rotate(-8deg);
+    width:34px; height:34px;
+    border: 1.5px solid var(--seal);
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: var(--ink);
+    font-family: var(--serif-cjk);
+    font-size: 15px;
+    color: var(--seal);
+  }
+
+  /* ---------- panels ---------- */
+  .panel{
+    border-radius: var(--radius);
+    display:flex;
+    flex-direction:column;
+    min-height: 480px;
+  }
+
+  .panel-head{
+    padding: 18px 22px 12px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .panel-head h2{
+    font-size: 13px;
+    font-weight:600;
+    margin:0;
+    letter-spacing: 0.3px;
+  }
+  .panel-head .lang-tag{
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+
+  /* input panel — dark glass */
+  .panel.input{
+    background: linear-gradient(180deg, var(--ink-panel), var(--ink-panel-2));
+    border: 1px solid var(--ink-border);
+  }
+  .panel.input .panel-head h2{ color: var(--ink-text-dim); }
+  .panel.input .lang-tag{
+    background: rgba(165,56,42,0.14);
+    color: #E19A8B;
+    border: 1px solid rgba(165,56,42,0.35);
+  }
+  textarea{
+    flex:1;
+    resize:none;
+    margin: 0 22px 22px;
+    padding: 16px 18px;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid var(--ink-border);
+    border-radius: 8px;
+    color: var(--ink-text);
+    font-family: var(--serif-latin);
+    font-size: 16px;
+    line-height: 1.6;
+    min-height: 300px;
+  }
+  textarea::placeholder{ color: var(--ink-text-dim); }
+  textarea:focus{
+    outline: none;
+    border-color: var(--seal);
+    box-shadow: 0 0 0 3px rgba(165,56,42,0.18);
+  }
+
+  .actions{
+    display:flex;
+    gap:10px;
+    padding: 0 22px 22px;
+    flex-wrap: wrap;
+  }
+  button{
+    font-family: var(--sans);
+    font-weight:600;
+    font-size: 14px;
+    border-radius: 7px;
+    padding: 11px 18px;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+  }
+  button:active{ transform: translateY(1px); }
+  button:focus-visible{
+    outline: 2px solid #E19A8B;
+    outline-offset: 2px;
+  }
+  button:disabled{
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-primary{
+    background: var(--seal);
+    color: #FBEDE8;
+  }
+  .btn-primary:hover:not(:disabled){ background: var(--seal-dark); }
+
+  .btn-ghost{
+    background: transparent;
+    color: var(--ink-text-dim);
+    border: 1px solid var(--ink-border);
+  }
+  .btn-ghost:hover:not(:disabled){ color: var(--ink-text); border-color: var(--ink-text-dim); }
+
+  .btn-jade{
+    background: var(--jade);
+    color: #EAF3EF;
+  }
+  .btn-jade:hover:not(:disabled){ background: var(--jade-dark); }
+
+  /* output panel — paper */
+  .panel.output{
+    background: var(--paper);
+    border: 1px solid var(--paper-border);
+    color: var(--paper-text);
+  }
+  .panel.output .panel-head h2{ color: var(--paper-text-dim); }
+  .panel.output .lang-tag{
+    background: rgba(76,122,109,0.14);
+    color: var(--jade-dark);
+    border: 1px solid rgba(76,122,109,0.35);
+  }
+
+  .output-body{
+    flex:1;
+    margin: 0 22px;
+    padding: 20px 20px 6px;
+    display:flex;
+    flex-direction:column;
+    gap: 18px;
+    min-height: 300px;
+  }
+
+  .result-zh{
+    font-family: var(--serif-cjk);
+    font-size: 21px;
+    line-height: 1.85;
+    font-weight: 600;
+    color: var(--paper-text);
+  }
+  .result-en{
+    font-family: var(--serif-latin);
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--paper-text);
+    padding-top: 16px;
+    border-top: 1px solid var(--paper-border);
+  }
+
+  .placeholder{
+    margin: auto 0;
+    color: var(--paper-text-dim);
+    font-family: var(--serif-latin);
+    font-style: italic;
+    font-size: 15px;
+    text-align:center;
+  }
+
+  .error-box{
+    margin: auto 0;
+    background: rgba(165,56,42,0.08);
+    border: 1px solid rgba(165,56,42,0.35);
+    color: var(--seal-dark);
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .loading-row{
+    margin: auto 0;
+    display:flex;
+    align-items:center;
+    gap: 12px;
+    color: var(--paper-text-dim);
+    font-size: 14px;
+    justify-content:center;
+  }
+  .brush{
+    width: 18px; height: 18px;
+    border: 2px solid var(--paper-border);
+    border-top-color: var(--seal);
+    border-radius: 50%;
+    animation: spin 0.85s linear infinite;
+  }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+
+  .output-actions{
+    display:flex;
+    gap:10px;
+    padding: 14px 22px 22px;
+    flex-wrap: wrap;
+  }
+
+  .toast{
+    position: fixed;
+    bottom: 26px;
+    left: 50%;
+    transform: translateX(-50%) translateY(12px);
+    background: var(--jade-dark);
+    color: #EAF3EF;
+    padding: 11px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 50;
+  }
+  .toast.show{
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  footer{
+    text-align:center;
+    padding: 16px;
+    color: var(--ink-text-dim);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Universal Translator <span>· 通譯</span></h1>
+  <p>L2 support desk — auto-detects the source language</p>
+</header>
+
+<main>
+  <section class="panel input">
+    <div class="panel-head">
+      <h2>Input</h2>
+      <span class="lang-tag" id="detectedTag">auto-detect</span>
+    </div>
+    <textarea id="sourceText" placeholder="Type or paste the ticket text here — English, Tagalog, or any other language…"></textarea>
+    <div class="actions">
+      <button class="btn-primary" id="translateBtn">Translate</button>
+      <button class="btn-ghost" id="clearBtn">Clear</button>
+    </div>
+  </section>
+
+  <div class="spine" aria-hidden="true">
+    <div class="line"><div class="stamp">譯</div></div>
+  </div>
+
+  <section class="panel output">
+    <div class="panel-head">
+      <h2>Output</h2>
+      <span class="lang-tag" id="statusTag">ready</span>
+    </div>
+    <div class="output-body" id="outputBody">
+      <p class="placeholder">Translated text will appear here — Traditional Chinese first, English underneath.</p>
+    </div>
+    <div class="output-actions">
+      <button class="btn-jade" id="copyBtn" disabled>Copy to JIRA</button>
+    </div>
+  </section>
+</main>
+
+<footer>Names, IDs, numbers, URLs, and technical terms are preserved as-is.</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================================
+   TRANSLATION API CONFIGURATION
+   -------------------------------------------------------------------------
+   Edit the values below to point at whichever LLM translation backend you
+   use. The default target is OpenAI's Chat Completions endpoint because it
+   handles free-form instructions (glossary terms, tone, formatting) far
+   better than a plain machine-translation API.
+
+   IMPORTANT: calling a provider directly from client-side JS exposes your
+   API key to anyone who opens devtools. For a real deployment, put a tiny
+   serverless function (e.g. a Vercel /api route) in front of this call and
+   point `endpoint` at that route instead — see the comment in
+   callTranslationAPI() below for the swap-in point.
+   ========================================================================= */
+const CONFIG = {
+  provider: "openai",                                   // "openai" | "anthropic" | "custom"
+  endpoint: "https://api.openai.com/v1/chat/completions",
+  apiKey: "YOUR_API_KEY_HERE",                           // <-- replace with your key (or proxy route)
+  model: "gpt-4o-mini",
+};
+
+/* L2 support glossary — extend this freely. It's injected into the prompt
+   so the model prefers these mappings whenever the term appears. */
+const GLOSSARY = {
+  "Member": "會員",
+  "Withdrawal": "提款",
+  "Deposit": "存款",
+  "Turnover": "流水",
+  "Push Notification": "推播",
+};
+
+const glossaryList = Object.entries(GLOSSARY)
+  .map(([en, zh]) => `${en} -> ${zh}`)
+  .join("; ");
+
+const SYSTEM_PROMPT = `You are a professional translator for an L2 customer-support team at an online platform.
+Detect the language of the user's message (it may be English, Tagalog, or any other language).
+Produce two translations of the message:
+1. "zh": natural, professional Traditional Chinese (繁體中文).
+2. "en": natural, professional English.
+
+Rules:
+- Preserve names, account/ticket IDs, numbers, URLs, and technical terms exactly as written.
+- Prefer this support-team glossary when the corresponding concept appears: ${glossaryList}.
+- Keep tone neutral and professional, suitable for pasting into a support ticket.
+- If the source text is already in Chinese, still return a natural English translation, and return the Chinese as-is (lightly cleaned up if needed).
+- If the source text is already in English, still return a natural Traditional Chinese translation.
+- Respond with ONLY a JSON object, no markdown fences, no commentary, in exactly this shape:
+{"detected_language": "string", "zh": "string", "en": "string"}`;
+
+/* ---------- DOM references ---------- */
+const sourceText   = document.getElementById('sourceText');
+const translateBtn = document.getElementById('translateBtn');
+const clearBtn      = document.getElementById('clearBtn');
+const copyBtn       = document.getElementById('copyBtn');
+const outputBody    = document.getElementById('outputBody');
+const statusTag     = document.getElementById('statusTag');
+const detectedTag   = document.getElementById('detectedTag');
+const toast         = document.getElementById('toast');
+
+let lastResult = null; // { zh, en, detected_language }
+
+/* ---------- helpers ---------- */
+function setStatus(text){
+  statusTag.textContent = text;
+}
+
+function showToast(message){
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => toast.classList.remove('show'), 2200);
+}
+
+function renderPlaceholder(){
+  outputBody.innerHTML = `<p class="placeholder">Translated text will appear here — Traditional Chinese first, English underneath.</p>`;
+  copyBtn.disabled = true;
+  lastResult = null;
+  setStatus('ready');
+  detectedTag.textContent = 'auto-detect';
+}
+
+function renderLoading(){
+  outputBody.innerHTML = `
+    <div class="loading-row">
+      <span class="brush"></span>
+      <span>Translating…</span>
+    </div>`;
+  copyBtn.disabled = true;
+  setStatus('translating…');
+}
+
+function renderError(message){
+  outputBody.innerHTML = `<div class="error-box">Translation failed: ${escapeHtml(message)}</div>`;
+  copyBtn.disabled = true;
+  setStatus('error');
+}
+
+function renderResult(result){
+  outputBody.innerHTML = `
+    <p class="result-zh">${escapeHtml(result.zh)}</p>
+    <p class="result-en">${escapeHtml(result.en)}</p>
+  `;
+  copyBtn.disabled = false;
+  setStatus('done');
+  detectedTag.textContent = result.detected_language || 'auto-detect';
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function stripCodeFences(text){
+  return text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+}
+
+/* ---------- API call ---------- */
+async function callTranslationAPI(text){
+  // Swap this function's body if you proxy through your own serverless
+  // route instead of calling the provider directly from the browser.
+  const body = {
+    model: CONFIG.model,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: text }
+    ],
+    temperature: 0.2,
+  };
+
+  const response = await fetch(CONFIG.endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${CONFIG.apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok){
+    let detail = '';
+    try{
+      const errJson = await response.json();
+      detail = errJson?.error?.message ? ` — ${errJson.error.message}` : '';
+    }catch(_e){ /* ignore parse failure */ }
+    throw new Error(`API request failed (${response.status})${detail}`);
+  }
+
+  const data = await response.json();
+  const raw = data?.choices?.[0]?.message?.content;
+  if (!raw){
+    throw new Error("The API returned an unexpected response shape.");
+  }
+
+  let parsed;
+  try{
+    parsed = JSON.parse(stripCodeFences(raw));
+  }catch(_e){
+    throw new Error("Could not parse the translation response as JSON.");
+  }
+
+  if (!parsed.zh || !parsed.en){
+    throw new Error("The response was missing a Chinese or English translation.");
+  }
+
+  return parsed;
+}
+
+/* ---------- event handlers ---------- */
+async function handleTranslate(){
+  const text = sourceText.value.trim();
+  if (!text){
+    renderError("Enter some text to translate first.");
+    return;
+  }
+
+  if (!CONFIG.apiKey || CONFIG.apiKey === "YOUR_API_KEY_HERE"){
+    renderError("No API key configured. Set CONFIG.apiKey (or point CONFIG.endpoint at your own proxy) near the top of the script.");
+    return;
+  }
+
+  translateBtn.disabled = true;
+  renderLoading();
+
+  try{
+    const result = await callTranslationAPI(text);
+    lastResult = result;
+    renderResult(result);
+  }catch(err){
+    renderError(err.message || "Something went wrong while translating.");
+  }finally{
+    translateBtn.disabled = false;
+  }
+}
+
+function handleClear(){
+  sourceText.value = '';
+  renderPlaceholder();
+  sourceText.focus();
+}
+
+async function handleCopy(){
+  if (!lastResult) return;
+  const payload = `${lastResult.zh}\n\n${lastResult.en}\n`;
+  try{
+    await navigator.clipboard.writeText(payload);
+    showToast('Copied — ready to paste into JIRA');
+  }catch(_e){
+    // fallback for browsers without clipboard API permission
+    const tmp = document.createElement('textarea');
+    tmp.value = payload;
+    document.body.appendChild(tmp);
+    tmp.select();
+    document.execCommand('copy');
+    document.body.removeChild(tmp);
+    showToast('Copied — ready to paste into JIRA');
+  }
+}
+
+translateBtn.addEventListener('click', handleTranslate);
+clearBtn.addEventListener('click', handleClear);
+copyBtn.addEventListener('click', handleCopy);
+
+sourceText.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter'){
+    handleTranslate();
+  }
+});
+</script>
+</body>
+</html>
